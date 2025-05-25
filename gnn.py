@@ -1520,5 +1520,270 @@ def main():
     return model, results, history
 
 
+def create_day_based_split(df: pd.DataFrame, processor: CellularDataProcessor,
+                           train_ratio: float = 0.8) -> Tuple[List[Data], List[Data], List[Data]]:
+    """
+    Create train/val/test split based on different days of measurements.
+
+    This implements Scenario 2: training and test sets built from measurements 
+    taken on different days to evaluate generalization across varying 
+    environmental conditions and time periods.
+
+    Args:
+        df: DataFrame containing cellular measurement data
+        processor: Data processor for creating graph objects
+        train_ratio: Approximate ratio of data for training (default: 0.8)
+
+    Returns:
+        Tuple of (train_graphs, val_graphs, test_graphs)
+    """
+    print("Creating day-based split (Scenario 2)...")
+
+    # Extract timestamp and convert to day
+    df['day'] = df['time'].apply(lambda x: int(float(x) / (24 * 3600 * 1e9)))
+
+    # Get unique days
+    unique_days = df['day'].unique()
+    print(f"Dataset contains measurements from {len(unique_days)} unique days")
+
+    # Sort days to ensure reproducibility
+    unique_days = sorted(unique_days)
+
+    # Calculate number of days for training
+    num_train_days = int(len(unique_days) * train_ratio)
+
+    # Split days for train/test
+    train_days = unique_days[:num_train_days]
+    test_days = unique_days[num_train_days:]
+
+    # Further split train into train/val (90% train, 10% val)
+    num_val_days = max(1, int(len(train_days) * 0.1))
+    val_days = train_days[-num_val_days:]
+    train_days = train_days[:-num_val_days]
+
+    print(f"Train: {len(train_days)} days, Val: {len(val_days)} days, Test: {len(test_days)} days")
+
+    # Create dataframes for each split
+    train_df = df[df['day'].isin(train_days)]
+    val_df = df[df['day'].isin(val_days)]
+    test_df = df[df['day'].isin(test_days)]
+
+    print(f"Train: {len(train_df)} records ({len(train_df)/len(df)*100:.1f}%)")
+    print(f"Val: {len(val_df)} records ({len(val_df)/len(df)*100:.1f}%)")
+    print(f"Test: {len(test_df)} records ({len(test_df)/len(df)*100:.1f}%)")
+
+    # Process each dataframe into graphs
+    print("Processing training data...")
+    train_graphs = processor.process_dataset(train_df)
+
+    print("Processing validation data...")
+    val_graphs = processor.process_dataset(val_df)
+
+    print("Processing test data...")
+    test_graphs = processor.process_dataset(test_df)
+
+    return train_graphs, val_graphs, test_graphs
+
+
+def evaluate_all_scenarios(df: pd.DataFrame):
+    """
+    Evaluate the GNN model on both test scenarios:
+    1. Sequential split (4:1 for every 5 measurements)
+    2. Different days split (training and testing from different days)
+
+    Args:
+        df: DataFrame containing cellular measurement data
+    """
+    print("GNN-Based Cellular Network Localization - Multiple Scenario Evaluation")
+    print("=" * 80)
+
+    # Set device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+
+    results = {}
+
+    # SCENARIO 1: Sequential split
+    print("\n" + "=" * 80)
+    print("SCENARIO 1: SEQUENTIAL SPLIT (4:1 FOR EVERY 5 MEASUREMENTS)")
+    print("=" * 80)
+
+    # Initialize data processor
+    processor_s1 = CellularDataProcessor(
+        distance_threshold=0.005,
+        rssi_threshold=15.0
+    )
+
+    # Process dataset into graphs
+    graphs_s1 = processor_s1.process_dataset(df)
+    print(f"Created {len(graphs_s1)} valid graphs")
+
+    # Create sequential split
+    train_graphs_s1, val_graphs_s1, test_graphs_s1 = create_improved_data_split(graphs_s1)
+
+    # Create data loaders
+    train_loader_s1 = DataLoader(train_graphs_s1, batch_size=32, shuffle=True)
+    val_loader_s1 = DataLoader(val_graphs_s1, batch_size=32, shuffle=False)
+    test_loader_s1 = DataLoader(test_graphs_s1, batch_size=32, shuffle=False)
+
+    # Initialize model
+    model_s1 = ImprovedGNNModel(
+        input_dim=7,
+        hidden_dim=128,
+        edge_dim=3
+    )
+
+    # Train model
+    trainer_s1 = GNNTrainer(model_s1, device)
+    history_s1 = trainer_s1.train(train_loader_s1, val_loader_s1, num_epochs=200)
+
+    # Evaluate model
+    evaluator_s1 = ModelEvaluator(model_s1, processor_s1, device)
+    results_s1 = evaluator_s1.evaluate(test_loader_s1)
+
+    # Save results
+    results['scenario1'] = results_s1
+
+    # Plot and save results
+    evaluator_s1.plot_results(results_s1, 'scenario1_results.png')
+    torch.save(model_s1.state_dict(), 'model_scenario1.pth')
+
+    # SCENARIO 2: Different days split
+    print("\n" + "=" * 80)
+    print("SCENARIO 2: DIFFERENT DAYS SPLIT")
+    print("=" * 80)
+
+    # Initialize data processor
+    processor_s2 = CellularDataProcessor(
+        distance_threshold=0.005,
+        rssi_threshold=15.0
+    )
+
+    # Create day-based split
+    train_graphs_s2, val_graphs_s2, test_graphs_s2 = create_day_based_split(df, processor_s2)
+
+    # Create data loaders
+    train_loader_s2 = DataLoader(train_graphs_s2, batch_size=32, shuffle=True)
+    val_loader_s2 = DataLoader(val_graphs_s2, batch_size=32, shuffle=False)
+    test_loader_s2 = DataLoader(test_graphs_s2, batch_size=32, shuffle=False)
+
+    # Initialize model
+    model_s2 = ImprovedGNNModel(
+        input_dim=7,
+        hidden_dim=128,
+        edge_dim=3
+    )
+
+    # Train model
+    trainer_s2 = GNNTrainer(model_s2, device)
+    history_s2 = trainer_s2.train(train_loader_s2, val_loader_s2, num_epochs=200)
+
+    # Evaluate model
+    evaluator_s2 = ModelEvaluator(model_s2, processor_s2, device)
+    results_s2 = evaluator_s2.evaluate(test_loader_s2)
+
+    # Save results
+    results['scenario2'] = results_s2
+
+    # Plot and save results
+    evaluator_s2.plot_results(results_s2, 'scenario2_results.png')
+    torch.save(model_s2.state_dict(), 'model_scenario2.pth')
+
+    # Compare scenarios
+    compare_scenarios(results)
+
+    return results
+
+
+def compare_scenarios(results: Dict):
+    """
+    Compare results from different test scenarios.
+
+    Args:
+        results: Dictionary containing results from different scenarios
+    """
+    # Create a figure and axis
+    fig, ax = plt.figure(figsize=(12, 6)), plt.gca()
+
+    # Hide axes
+    ax.axis('tight')
+    ax.axis('off')
+
+    # Create the table data
+    metrics = ['Mean Distance Error (m)', 'Median Distance Error (m)',
+               'Accuracy within 50m (%)', 'Accuracy within 100m (%)',
+               'Accuracy within 200m (%)']
+
+    table_data = [
+        ['Scenario 1 (Sequential Split)',
+         f"{results['scenario1']['mean_distance_error_m']:.2f}",
+         f"{results['scenario1']['median_distance_error_m']:.2f}",
+         f"{results['scenario1']['accuracy_50m']:.1f}",
+         f"{results['scenario1']['accuracy_100m']:.1f}",
+         f"{results['scenario1']['accuracy_200m']:.1f}"],
+        ['Scenario 2 (Different Days)',
+         f"{results['scenario2']['mean_distance_error_m']:.2f}",
+         f"{results['scenario2']['median_distance_error_m']:.2f}",
+         f"{results['scenario2']['accuracy_50m']:.1f}",
+         f"{results['scenario2']['accuracy_100m']:.1f}",
+         f"{results['scenario2']['accuracy_200m']:.1f}"]
+    ]
+
+    # Add header
+    header = ['Scenario', 'Mean (m)', 'Median (m)', 'Acc@50m (%)', 'Acc@100m (%)', 'Acc@200m (%)']
+
+    # Create the table
+    table = ax.table(
+        cellText=table_data,
+        colLabels=header,
+        loc='center',
+        cellLoc='center',
+        colColours=['#f2f2f2']*6,
+        colWidths=[0.25, 0.15, 0.15, 0.15, 0.15, 0.15]
+    )
+
+    # Style the table
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.5)
+
+    # Add title
+    plt.title('Comparison of Localization Performance Across Scenarios', fontsize=14, pad=20)
+
+    # Save the figure
+    plt.savefig('scenario_comparison.png', bbox_inches='tight', dpi=300)
+
+    # Print comparison
+    print("\n" + "=" * 80)
+    print("COMPARISON OF SCENARIOS")
+    print("=" * 80)
+    print(f"Scenario 1 (Sequential Split):")
+    print(f"  Mean Distance Error:    {results['scenario1']['mean_distance_error_m']:.2f} meters")
+    print(f"  Median Distance Error:  {results['scenario1']['median_distance_error_m']:.2f} meters")
+    print(f"  Accuracy within 50m:    {results['scenario1']['accuracy_50m']:.1f}%")
+    print(f"  Accuracy within 100m:   {results['scenario1']['accuracy_100m']:.1f}%")
+
+    print(f"\nScenario 2 (Different Days):")
+    print(f"  Mean Distance Error:    {results['scenario2']['mean_distance_error_m']:.2f} meters")
+    print(f"  Median Distance Error:  {results['scenario2']['median_distance_error_m']:.2f} meters")
+    print(f"  Accuracy within 50m:    {results['scenario2']['accuracy_50m']:.1f}%")
+    print(f"  Accuracy within 100m:   {results['scenario2']['accuracy_100m']:.1f}%")
+
+    print("\nInsights:")
+    if results['scenario1']['mean_distance_error_m'] < results['scenario2']['mean_distance_error_m']:
+        print("- Scenario 1 yields better localization accuracy than Scenario 2")
+        print("- This suggests the model's performance degrades when tested on completely different days")
+        print("- Environmental factors and temporal variations appear to impact localization accuracy")
+    else:
+        print("- Scenario 2 yields better localization accuracy than Scenario 1")
+        print("- This suggests the model generalizes well across different days")
+        print("- The model appears robust to environmental and temporal variations")
+
+
 if __name__ == "__main__":
-    model, results, history = main()
+    # Load data
+    df = pd.read_csv('data/logFile_urban_data.csv')
+    print(f"Loaded {len(df)} records")
+
+    # Run evaluation for both scenarios
+    results = evaluate_all_scenarios(df)
