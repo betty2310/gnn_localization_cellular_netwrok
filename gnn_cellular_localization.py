@@ -164,12 +164,11 @@ class CellularDataProcessor:
         """
         Convert a cellular measurement record into a PyTorch Geometric graph.
 
-        Advanced Graph Construction Strategy:
-        - Nodes: Each detected cell becomes a node with comprehensive features
-        - Virtual reference node: Additional node representing the potential user location
-        - Edges: Created using multiple strategies with physics-inspired weighting
-        - Edge attributes: Comprehensive edge features for sophisticated message passing
-        - Hierarchical graph structure to better model cellular network topology
+        Graph Construction Strategy:
+        - Nodes: Each detected cell becomes a node with features [lat, lon, rssi]
+        - Edges: Connect cells within distance_threshold (spatial proximity)
+        - Node features are normalized for better training stability
+        - Self-loops are added to ensure all nodes receive their own information
 
         Args:
             record: Parsed cellular measurement record
@@ -178,219 +177,46 @@ class CellularDataProcessor:
             PyTorch Geometric Data object representing the measurement as a graph
         """
         cells = record['cells']
-        num_cells = len(cells)
+        num_nodes = len(cells)
 
-        if num_cells == 0:
-            # Create a dummy graph with minimal information to avoid None returns
-            x = torch.tensor([[0, 0, -100, 0, 0, 0]], dtype=torch.float)
-            edge_index = torch.tensor([[0, 0], [0, 0]], dtype=torch.long)
-            edge_attr = torch.tensor([[0, 0, 0, 0]], dtype=torch.float)
-            y = torch.tensor([record['lat_ref'], record['lon_ref']], dtype=torch.float)
-            graph_features = torch.tensor([0, -100, 0, -100, -100, 0], dtype=torch.float)
-            return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y,
-                        graph_features=graph_features, num_nodes=1)
+        if num_nodes == 0:
+            return None
 
-        # Create enhanced node features
+        # Create node features: [normalized_lat, normalized_lon, normalized_rssi]
         node_features = []
         positions = []
-        rssi_values = []
-        lac_values = []
-        cid_values = []
-
-        # Calculate centroid of cells as an estimate of user position
-        centroid_lat = sum(cell['lat'] for cell in cells) / num_cells
-        centroid_lon = sum(cell['lon'] for cell in cells) / num_cells
-
-        # Calculate weighted centroid based on signal strength
-        # Stronger signals (less negative RSSI) get higher weights
-        total_weight = 0
-        weighted_lat = 0
-        weighted_lon = 0
 
         for cell in cells:
-            # Convert RSSI to weight (higher RSSI = higher weight)
-            # Typical RSSI range: -50 (strong) to -120 (weak)
-            weight = 10 ** ((cell['rssi'] + 100) / 20)  # Convert dBm to linear scale with offset
-            total_weight += weight
-            weighted_lat += cell['lat'] * weight
-            weighted_lon += cell['lon'] * weight
-
-        weighted_centroid_lat = weighted_lat / total_weight if total_weight > 0 else centroid_lat
-        weighted_centroid_lon = weighted_lon / total_weight if total_weight > 0 else centroid_lon
-
-        # Add a virtual reference node representing estimated user position
-        # This node will be the first node (index 0) in our graph
-        virtual_node_features = [
-            weighted_centroid_lat,
-            weighted_centroid_lon,
-            np.mean([cell['rssi'] for cell in cells]),  # Average RSSI
-            1.0,  # Virtual node indicator
-            0.0,  # No LAC
-            0.0,  # No CID
-        ]
-
-        # Add the virtual node
-        node_features.append(virtual_node_features)
-        positions.append([weighted_centroid_lat, weighted_centroid_lon])
-        rssi_values.append(np.mean([cell['rssi'] for cell in cells]))
-        lac_values.append(0)  # Placeholder
-        cid_values.append(0)  # Placeholder
-
-        # Add actual cell nodes
-        for cell in cells:
-            # Calculate signal quality feature (normalized RSSI)
-            # RSSI typically ranges from -50 (strong) to -120 (weak)
-            signal_quality = min(1.0, max(0.0, (cell['rssi'] + 120) / 70.0))  # Normalize to [0,1]
-
-            # Distance to weighted centroid
-            dist_to_centroid = self.calculate_distance(
-                cell['lat'], cell['lon'],
-                weighted_centroid_lat, weighted_centroid_lon
-            )
-
-            # Normalized LAC and CID for additional features
-            normalized_lac = cell['lac'] / 20000.0  # Typical range
-            normalized_cid = cell['cid'] / 60000.0  # Typical range
-
-            # Enhanced node features
-            node_features.append([
-                cell['lat'],
-                cell['lon'],
-                cell['rssi'],
-                signal_quality,  # Signal quality as a feature
-                normalized_lac,  # Normalized LAC
-                normalized_cid,  # Normalized CID
-            ])
-
+            node_features.append([cell['lat'], cell['lon'], cell['rssi']])
             positions.append([cell['lat'], cell['lon']])
-            rssi_values.append(cell['rssi'])
-            lac_values.append(cell['lac'])
-            cid_values.append(cell['cid'])
 
         node_features = np.array(node_features)
         positions = np.array(positions)
-        rssi_values = np.array(rssi_values)
 
-        # Total number of nodes (cells + virtual reference node)
-        num_nodes = num_cells + 1
-
-        # Create edges with multiple strategies
+        # Create edges based on spatial proximity
         edge_indices = []
-        edge_attributes = []
 
-        # Track edge creation statistics
-        spatial_edges = 0
-        rssi_edges = 0
-        virtual_edges = 0
-
-        # First, connect virtual node to all cell nodes
-        for j in range(1, num_nodes):  # Skip the virtual node itself (index 0)
-            # Calculate spatial distance
-            dist = self.calculate_distance(
-                positions[0][0], positions[0][1],  # Virtual node position
-                positions[j][0], positions[j][1]   # Cell position
-            )
-
-            # Calculate signal-based weight (stronger signal = stronger connection)
-            signal_weight = min(1.0, max(0.0, (rssi_values[j] + 120) / 70.0))
-
-            # Distance-based weight (closer = stronger connection)
-            # Use inverse square law to model signal propagation physics
-            dist_weight = 1.0 / (1.0 + dist**2)
-
-            # Create bidirectional edges between virtual node and cell
-            # Virtual node to cell
-            edge_indices.append([0, j])
-            edge_attributes.append([
-                dist_weight,                # Distance weight
-                signal_weight,              # Signal weight
-                1.0,                        # Virtual node indicator
-                dist                        # Raw distance for physics-based modeling
-            ])
-
-            # Cell to virtual node
-            edge_indices.append([j, 0])
-            edge_attributes.append([
-                dist_weight,                # Distance weight
-                signal_weight,              # Signal weight
-                1.0,                        # Virtual node indicator
-                dist                        # Raw distance
-            ])
-
-            virtual_edges += 2
-
-        # Then, connect cell nodes to each other
-        for i in range(1, num_nodes):  # Start from index 1 (first cell node)
-            for j in range(1, num_nodes):  # Start from index 1 (first cell node)
+        for i in range(num_nodes):
+            for j in range(num_nodes):
                 if i != j:  # No self-loops initially
-                    # Calculate spatial distance
                     dist = self.calculate_distance(
                         positions[i][0], positions[i][1],
                         positions[j][0], positions[j][1]
                     )
-
-                    # Calculate RSSI difference
-                    rssi_diff = abs(rssi_values[i] - rssi_values[j])
-
-                    # Check if cells are from the same site (same LAC)
-                    same_lac = lac_values[i] == lac_values[j]
-                    same_site_weight = 1.0 if same_lac else 0.5
-
-                    # Normalize distance and RSSI difference for edge attributes
-                    dist_norm = min(1.0, dist / (self.distance_threshold * 2))
-                    rssi_diff_norm = min(1.0, rssi_diff / (self.rssi_threshold * 2))
-
-                    # Physics-inspired edge weight based on signal propagation
-                    # Use inverse square law with RSSI adjustment
-                    physics_weight = (1.0 / (1.0 + dist**2)) * (1.0 - rssi_diff_norm) * same_site_weight
-
-                    # Create edge based on spatial proximity
                     if dist <= self.distance_threshold:
                         edge_indices.append([i, j])
-                        edge_attributes.append([
-                            1.0 - dist_norm,       # Distance weight
-                            1.0 - rssi_diff_norm,  # RSSI similarity
-                            0.0,                   # Not a virtual edge
-                            physics_weight         # Physics-based weight
-                        ])
-                        spatial_edges += 1
 
-                    # Create edge based on RSSI similarity (if not already created)
-                    elif rssi_diff <= self.rssi_threshold:
-                        edge_indices.append([i, j])
-                        edge_attributes.append([
-                            0.0,                   # No spatial proximity
-                            1.0 - rssi_diff_norm,  # RSSI similarity
-                            0.0,                   # Not a virtual edge
-                            physics_weight * 0.5   # Reduced physics weight
-                        ])
-                        rssi_edges += 1
-
-                    # Always create a weak edge to ensure graph connectivity
-                    else:
-                        edge_indices.append([i, j])
-                        edge_attributes.append([
-                            0.1 * (1.0 - dist_norm),      # Weak spatial connection
-                            0.1 * (1.0 - rssi_diff_norm),  # Weak RSSI connection
-                            0.0,                          # Not a virtual edge
-                            physics_weight * 0.1          # Very weak physics weight
-                        ])
-
-        # Add self-loops with strong connections
+        # Add self-loops for all nodes (important for GNN message passing)
         for i in range(num_nodes):
             edge_indices.append([i, i])
-            # Self-connection (stronger for virtual node)
-            self_weight = 2.0 if i == 0 else 1.0
-            edge_attributes.append([self_weight, self_weight, float(i == 0), self_weight])
-
-        # Update edge statistics
-        self.spatial_edges += spatial_edges
-        self.rssi_edges += rssi_edges
-        self.total_edges += len(edge_indices)
 
         # Convert to tensor format
-        edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
-        edge_attr = torch.tensor(edge_attributes, dtype=torch.float)
+        if len(edge_indices) > 0:
+            edge_index = torch.tensor(edge_indices, dtype=torch.long).t().contiguous()
+        else:
+            # If no edges, create self-loops only
+            edge_index = torch.tensor([[i, i] for i in range(num_nodes)],
+                                      dtype=torch.long).t().contiguous()
 
         # Node features tensor
         x = torch.tensor(node_features, dtype=torch.float)
@@ -398,20 +224,14 @@ class CellularDataProcessor:
         # Target coordinates (what we want to predict)
         y = torch.tensor([record['lat_ref'], record['lon_ref']], dtype=torch.float)
 
-        # Enhanced graph-level features
+        # Additional graph-level features
         graph_features = torch.tensor([
-            num_cells,                                                  # Number of detected cells
-            np.mean(rssi_values[1:]) if num_cells > 0 else -100,       # Mean RSSI (excluding virtual node)
-            np.std(rssi_values[1:]) if num_cells > 1 else 0,           # RSSI std
-            np.max(rssi_values[1:]) if num_cells > 0 else -100,        # Max RSSI (strongest signal)
-            np.min(rssi_values[1:]) if num_cells > 0 else -100,        # Min RSSI (weakest signal)
-            np.max(rssi_values[1:]) - np.min(rssi_values[1:]) if num_cells > 1 else 0,  # RSSI range
-            self.calculate_distance(weighted_centroid_lat, weighted_centroid_lon,
-                                    record['lat_ref'], record['lon_ref']),  # Centroid error estimate
-            float(num_cells >= 4),  # Indicator if we have enough cells for good triangulation
+            num_nodes,  # Number of detected cells
+            np.mean([cell['rssi'] for cell in cells]),  # Mean RSSI
+            np.std([cell['rssi'] for cell in cells]) if num_nodes > 1 else 0,  # RSSI std
         ], dtype=torch.float)
 
-        return Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y,
+        return Data(x=x, edge_index=edge_index, y=y,
                     graph_features=graph_features, num_nodes=num_nodes)
 
     def process_dataset(self, df: pd.DataFrame) -> List[Data]:
@@ -527,125 +347,102 @@ class CellularDataProcessor:
 
 class GNNLocalizationModel(nn.Module):
     """
-    Enhanced Graph Neural Network model for cellular network localization.
+    Graph Neural Network model for cellular network localization.
 
-    Improved Architecture Design Rationale:
-    =====================================
+    Architecture Design Rationale:
+    =============================
 
-    1. **Edge-Aware Graph Convolution**:
-       - Uses edge attributes to weight message passing
-       - Combines GAT and GCN for better feature extraction
-       - Deeper network with skip connections for better gradient flow
+    1. **Multi-layer Graph Convolution**:
+       - Uses Graph Attention Networks (GAT) for adaptive attention to important cells
+       - 3 layers allow for 3-hop message passing (sufficient for local cell clusters)
+       - Each layer: 64 → 128 → 64 hidden dimensions for feature expansion then compression
 
-    2. **Multi-scale Feature Extraction**:
-       - Parallel convolution paths with different receptive fields
-       - Captures both local and global cell relationships
-       - Aggregates features from different scales
+    2. **Attention Mechanism**:
+       - GAT layers learn to focus on most informative cells for localization
+       - 8 attention heads in first layer for diverse attention patterns
+       - Helps handle varying signal quality and cell importance
 
-    3. **Attention Mechanism**:
-       - Enhanced GAT layers with edge features
-       - Multiple attention heads capture diverse relationships
-       - Attention dropout for regularization
+    3. **Graph-level Pooling**:
+       - Combines mean and max pooling for comprehensive graph representation
+       - Mean pooling: captures average cell characteristics
+       - Max pooling: captures strongest signal characteristics
 
-    4. **Advanced Pooling Strategy**:
-       - Hierarchical pooling captures multi-scale graph information
-       - Weighted pooling based on signal strength
-       - Combines global and local features
+    4. **Regression Head**:
+       - Two-layer MLP with dropout for coordinate prediction
+       - Separate outputs for latitude and longitude
+       - Batch normalization for training stability
 
-    5. **Enhanced Regression Head**:
-       - Deeper MLP with residual connections
-       - Coordinate-specific prediction branches
-       - Ensemble of multiple prediction heads
+    5. **Regularization**:
+       - Dropout (0.3) prevents overfitting to specific cell configurations
+       - Batch normalization stabilizes training with varying graph sizes
     """
 
     def __init__(self,
-                 input_dim: int = 4,  # Enhanced node features
-                 hidden_dim: int = 128,
-                 num_layers: int = 4,
-                 num_heads: int = 4,
-                 dropout: float = 0.2,
-                 edge_dim: int = 2):  # Edge features dimension
+                 input_dim: int = 3,
+                 hidden_dim: int = 64,
+                 num_layers: int = 3,
+                 num_heads: int = 8,
+                 dropout: float = 0.3):
         """
-        Initialize enhanced GNN localization model.
+        Initialize GNN localization model.
 
         Args:
-            input_dim: Input feature dimension (enhanced node features)
+            input_dim: Input feature dimension (lat, lon, rssi = 3)
             hidden_dim: Hidden layer dimension
             num_layers: Number of graph convolution layers
             num_heads: Number of attention heads for GAT
             dropout: Dropout probability
-            edge_dim: Edge feature dimension
         """
         super(GNNLocalizationModel, self).__init__()
 
         self.num_layers = num_layers
         self.dropout = dropout
-        self.hidden_dim = hidden_dim
 
-        # Input feature transformation
-        self.input_transform = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-
-        # Graph convolution layers (using GAT with edge features)
+        # Graph convolution layers (using GAT for attention mechanism)
         self.convs = nn.ModuleList()
         self.batch_norms = nn.ModuleList()
 
-        # First layer: hidden_dim -> hidden_dim with edge features
-        self.convs.append(GATConv(hidden_dim, hidden_dim // num_heads,
-                                  heads=num_heads, dropout=dropout, edge_dim=edge_dim))
-        self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
+        # First layer: input_dim -> hidden_dim
+        self.convs.append(GATConv(input_dim, hidden_dim, heads=num_heads, dropout=dropout))
+        self.batch_norms.append(nn.BatchNorm1d(hidden_dim * num_heads))
 
-        # Middle layers with residual connections
-        for i in range(num_layers - 1):
-            self.convs.append(GATConv(hidden_dim, hidden_dim // num_heads,
-                                      heads=num_heads, dropout=dropout, edge_dim=edge_dim))
-            self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
+        # Middle layers: hidden_dim -> hidden_dim (with attention head concatenation)
+        for _ in range(num_layers - 2):
+            self.convs.append(GATConv(hidden_dim * num_heads, hidden_dim,
+                                      heads=num_heads, dropout=dropout))
+            self.batch_norms.append(nn.BatchNorm1d(hidden_dim * num_heads))
+
+        # Last layer: reduce to single head output
+        self.convs.append(GATConv(hidden_dim * num_heads, hidden_dim,
+                                  heads=1, dropout=dropout))
+        self.batch_norms.append(nn.BatchNorm1d(hidden_dim))
 
         # Graph-level feature processing
         self.graph_feature_mlp = nn.Sequential(
-            nn.Linear(6, hidden_dim // 2),  # Process enhanced graph-level features
-            nn.BatchNorm1d(hidden_dim // 2),
+            nn.Linear(3, hidden_dim // 2),  # Process graph-level features
             nn.ReLU(),
             nn.Dropout(dropout)
         )
 
-        # Final regression layers with residual connections
+        # Final regression layers
         # Combine pooled node features + graph features
         final_dim = hidden_dim * 2 + hidden_dim // 2  # mean_pool + max_pool + graph_features
 
-        # Shared feature extractor
-        self.shared_regressor = nn.Sequential(
+        self.regressor = nn.Sequential(
             nn.Linear(final_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
             nn.ReLU(),
-            nn.Dropout(dropout)
-        )
-
-        # Latitude branch
-        self.lat_regressor = nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.BatchNorm1d(hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, 1)
-        )
-
-        # Longitude branch
-        self.lon_regressor = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.BatchNorm1d(hidden_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, 1)
+            nn.Linear(hidden_dim // 2, 2)  # Output: [lat, lon]
         )
 
     def forward(self, data):
         """
-        Forward pass through the enhanced GNN model.
+        Forward pass through the GNN model.
 
         Args:
             data: PyTorch Geometric batch of graph data
@@ -654,60 +451,45 @@ class GNNLocalizationModel(nn.Module):
             Predicted coordinates [batch_size, 2]
         """
         x, edge_index, batch = data.x, data.edge_index, data.batch
-        edge_attr = data.edge_attr if hasattr(data, 'edge_attr') else None
         graph_features = data.graph_features
-
-        # Initial feature transformation
-        x = self.input_transform(x)
 
         # Graph convolution layers with residual connections
         for i, (conv, bn) in enumerate(zip(self.convs, self.batch_norms)):
-            # Apply GAT with edge attributes
-            x_new = conv(x, edge_index, edge_attr=edge_attr)
+            x_new = conv(x, edge_index)
             x_new = bn(x_new)
             x_new = F.relu(x_new)
             x_new = F.dropout(x_new, p=self.dropout, training=self.training)
 
-            # Residual connection (dimensions already match due to our design)
-            x = x + x_new
+            # Residual connection (when dimensions match)
+            if i > 0 and x.size(-1) == x_new.size(-1):
+                x = x + x_new
+            else:
+                x = x_new
 
         # Graph-level pooling
         mean_pool = global_mean_pool(x, batch)
         max_pool = global_max_pool(x, batch)
 
         # Process graph-level features
-        # Handle batched graph features - reshape to [batch_size, 6]
+        # Handle batched graph features - reshape to [batch_size, 3]
         if graph_features.dim() > 2:
-            # If graph_features is [batch_size, num_graphs, 6], take the mean
+            # If graph_features is [batch_size, num_graphs, 3], take the mean
             graph_features = graph_features.mean(dim=1)
         elif graph_features.dim() == 1:
-            # If graph_features is flattened, reshape to [batch_size, 6]
+            # If graph_features is flattened, reshape to [batch_size, 3]
             batch_size = mean_pool.size(0)
             graph_features = graph_features.view(batch_size, -1)
-            if graph_features.size(1) != 6:
-                # Pad or truncate to 6 features
-                if graph_features.size(1) < 6:
-                    # Pad with zeros
-                    padding = torch.zeros(batch_size, 6 - graph_features.size(1), device=graph_features.device)
-                    graph_features = torch.cat([graph_features, padding], dim=1)
-                else:
-                    # Take only the first 6 features
-                    graph_features = graph_features[:, :6]
+            if graph_features.size(1) != 3:
+                # Take only the first 3 features if there are more
+                graph_features = graph_features[:, :3]
 
         graph_feat = self.graph_feature_mlp(graph_features)
 
         # Combine all features
         combined = torch.cat([mean_pool, max_pool, graph_feat], dim=1)
 
-        # Shared feature extraction
-        shared_features = self.shared_regressor(combined)
-
-        # Separate branches for latitude and longitude
-        lat_pred = self.lat_regressor(shared_features)
-        lon_pred = self.lon_regressor(shared_features)
-
-        # Combine predictions
-        output = torch.cat([lat_pred, lon_pred], dim=1)
+        # Final regression
+        output = self.regressor(combined)
 
         return output
 
