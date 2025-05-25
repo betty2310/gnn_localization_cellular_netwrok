@@ -1,0 +1,18 @@
+[project]
+name = "localization-cellular-network-use-gnn"
+version = "0.1.0"
+description = "GNN-based cellular network localization system using Graph Neural Networks for improved location prediction accuracy"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.21.0",
+    "pandas>=1.3.0",
+    "torch>=2.0.0",
+    "torch-geometric>=2.3.0",
+    "scikit-learn>=1.0.0",
+    "matplotlib>=3.5.0",
+    "seaborn>=0.11.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0.0", "black>=22.0.0", "flake8>=4.0.0", "jupyter>=1.0.0"]
