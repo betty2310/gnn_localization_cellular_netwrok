@@ -765,7 +765,7 @@ class GNNTrainer:
             loss.backward()
 
             # Gradient clipping for stability
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
 
             self.optimizer.step()
 
@@ -1222,7 +1222,7 @@ class ModelEvaluator:
         methods = [
             'Cell ID', 'Centroid', 'Weighted Centroid', 'Linear Regression',
             'Support Vector Regression', 'Multilayer Perceptron', 'Fingerprint',
-            'CNN-CellImage', 'GNN (Our Method)'
+            'CNN-CellImage', 'GNN'
         ]
 
         # Example values from the paper (replace with actual values if available)
@@ -1511,7 +1511,7 @@ def main():
     evaluator.plot_results(results)
 
     # Save model and results
-    torch.save(model.state_dict(), 'enhanced_gnn_localization_model.pth')
+    torch.save(model.state_dict(), 'gnn_localization_model.pth')
 
     print("\n6. Training completed successfully!")
     print(f"Best validation loss: {history['best_val_loss']:.6f}")
