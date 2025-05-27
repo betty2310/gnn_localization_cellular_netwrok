@@ -1,17 +1,7 @@
 # GNN-Based Cellular Network Localization
-
-A comprehensive implementation of Graph Neural Network (GNN) approach for cellular network localization that leverages the inherent graph structure of cellular networks to improve localization accuracy compared to traditional fingerprint and CNN methods.
-
-## 🎯 Project Overview
-
-This project implements and compares three different approaches for cellular network localization:
-
-1. **GNN-based Localization** (Our main contribution)
-2. **Fingerprint-based Localization** (Traditional method)
-3. **CNN-CellImage Localization** (Image-based approach)
+A implementation of Graph Neural Network approach for cellular network localization that leverages the inherent graph structure of cellular networks to improve localization accuracy.
 
 ### Dataset Context
-
 The cellular network localization dataset was collected in Hanoi, Vietnam using Viettel network infrastructure. Each record contains:
 - GPS reference coordinates (lat_ref, lon_ref)
 - Timestamp and measurement index
@@ -19,8 +9,6 @@ The cellular network localization dataset was collected in Hanoi, Vietnam using 
 - For each cell: LAC, CID, cell coordinates, and RSSI values
 
 **Dataset Format:** `stt,lat_ref,lon_ref,time,cells,(lac,cid,cell_lat,cell_lon,rssi)...`
-
-## 🧠 Theoretical Foundation
 
 ### Why GNN Architecture Improves Localization Accuracy
 
@@ -120,81 +108,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 pip install torch-geometric
 ```
 
-## 📈 Usage
 
-### Basic GNN Training and Evaluation
-
-```python
-from gnn_cellular_localization import main
-
-# Run complete GNN training and evaluation
-model, results, history = main()
-
-# Results include:
-# - Mean distance error in meters
-# - Accuracy at various thresholds (10m, 25m, 50m, 100m, 200m, 500m)
-# - Training history and model checkpoints
-```
-
-### Comparative Analysis
-
-```python
-from comparative_analysis import main as comparative_main
-
-# Run comprehensive comparison of all three methods
-results = comparative_main()
-
-# Generates detailed comparison report and visualizations
-```
-
-### Custom Usage
-
-```python
-import pandas as pd
-from gnn_cellular_localization import CellularDataProcessor, GNNLocalizationModel
-
-# Load your data
-df = pd.read_csv('your_cellular_data.csv')
-
-# Process data into graphs
-processor = CellularDataProcessor(distance_threshold=0.01)
-graphs = processor.process_dataset(df)
-
-# Initialize and train model
-model = GNNLocalizationModel(input_dim=3, hidden_dim=64, num_layers=3)
-# ... training code
-```
-
-## 📊 Performance Metrics
-
-### Evaluation Metrics
-- **Mean Distance Error**: Average geographic distance error in meters
-- **Median Distance Error**: Robust measure of typical error
-- **RMSE/MAE**: Standard regression metrics
-- **Accuracy at Thresholds**: Percentage of predictions within distance thresholds
-- **Training/Inference Time**: Computational efficiency metrics
-
-### Expected Performance
-Based on the Hanoi dataset:
-- **GNN Method**: ~25-40m mean distance error
-- **Fingerprint Method**: ~45-60m mean distance error  
-- **CNN-CellImage Method**: ~35-50m mean distance error
-
-## 🔬 Comparative Analysis Results
-
-### Method Comparison
-
-| Method | Advantages | Disadvantages |
-|--------|------------|---------------|
-| **GNN** | ✓ Natural graph structure<br>✓ Adaptive to varying cells<br>✓ Complex spatial relationships | ✗ Requires GPU<br>✗ Complex implementation |
-| **Fingerprint** | ✓ Simple and interpretable<br>✓ Fast inference<br>✓ No training required | ✗ Extensive site survey<br>✗ Poor generalization |
-| **CNN-CellImage** | ✓ Proven CNN architectures<br>✓ End-to-end trainable | ✗ Artificial image conversion<br>✗ Fixed grid structure |
-
-### Performance Trade-offs
-- **Accuracy**: GNN > CNN-CellImage > Fingerprint
-- **Training Speed**: Fingerprint > CNN-CellImage > GNN
-- **Inference Speed**: Fingerprint ≈ GNN > CNN-CellImage
-- **Generalization**: GNN > CNN-CellImage > Fingerprint
 
 ## 📁 Project Structure
 

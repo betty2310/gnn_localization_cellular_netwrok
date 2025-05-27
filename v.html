@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cell Tower to Graph Transformation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #333;
+        }
+        svg {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        .legend {
+            margin-top: 15px;
+            font-size: 12px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+        }
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        .data-table {
+            margin-top: 20px;
+            font-size: 12px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th, .data-table td {
+            padding: 6px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        .info-box {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #333;">Cell Tower to Graph Transformation</h1>
+    
+    <div class="container">
+        <!-- Real World Map -->
+        <div class="panel">
+            <div class="title">1. Real World: Cell Towers & User Position</div>
+            <svg id="mapSvg" width="500" height="400"></svg>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff4444;"></div>
+                    <span>User Location (Ground Truth)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4444ff;"></div>
+                    <span>Cell Towers (Signal Strength by Size)</span>
+                </div>
+            </div>
+            
+            <table class="data-table">
+                <thead>
+                    <tr><th>Cell ID</th><th>Lat</th><th>Lon</th><th>RSSI</th><th>Signal</th></tr>
+                </thead>
+                <tbody id="cellData"></tbody>
+            </table>
+        </div>
+
+        <!-- Graph Structure -->
+        <div class="panel">
+            <div class="title">2. Graph Structure: Nodes & Edges</div>
+            <svg id="graphSvg" width="500" height="400"></svg>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4444ff;"></div>
+                    <span>Nodes (Cell Towers)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #888;"></div>
+                    <span>Edges (Distance/RSSI Similarity)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff8800; border-radius: 50%; width: 8px; height: 8px;"></div>
+                    <span>Self-loops (not shown for clarity)</span>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <strong>Graph Features:</strong><br>
+                • Nodes: 5 (one per cell tower)<br>
+                • Node features: [lat, lon, rssi, signal_quality_one_hot]<br>
+                • Edges: Based on distance threshold and RSSI similarity<br>
+                • Edge features: [edge_weight, distance, rssi_diff]<br>
+                • Graph target: [20.95439403, 105.7692392]
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Parse the data from your record
+        const record = {
+            stt: 1,
+            lat_ref: 20.95439403,
+            lon_ref: 105.7692392,
+            time: 2.33527E+14,
+            cells: 5,
+            towers: [
+                {id: '30555', lac: 12125, cid: 30555, lat: 20.956897, lon: 105.768824, rssi: -71},
+                {id: '50508', lac: 12125, cid: 50508, lat: 20.950294, lon: 105.778526, rssi: -77},
+                {id: '50507', lac: 12125, cid: 50507, lat: 20.95866, lon: 105.765843, rssi: -83},
+                {id: '56282', lac: 12125, cid: 56282, lat: 20.950768, lon: 105.767526, rssi: -69},
+                {id: '30554', lac: 12125, cid: 30554, lat: 20.954979, lon: 105.774017, rssi: -85}
+            ]
+        };
+
+        // Calculate bounds for mapping
+        const allLats = [record.lat_ref, ...record.towers.map(t => t.lat)];
+        const allLons = [record.lon_ref, ...record.towers.map(t => t.lon)];
+        const latMin = Math.min(...allLats) - 0.001;
+        const latMax = Math.max(...allLats) + 0.001;
+        const lonMin = Math.min(...allLons) - 0.001;
+        const lonMax = Math.max(...allLons) + 0.001;
+
+        // Mapping functions
+        function mapToSvg(lat, lon, svgWidth, svgHeight, margin = 50) {
+            const x = margin + (lon - lonMin) / (lonMax - lonMin) * (svgWidth - 2 * margin);
+            const y = margin + (latMax - lat) / (latMax - latMin) * (svgHeight - 2 * margin);
+            return {x, y};
+        }
+
+        function getSignalStrength(rssi) {
+            if (rssi >= -70) return 'Excellent';
+            if (rssi >= -80) return 'Good';
+            if (rssi >= -90) return 'Fair';
+            return 'Poor';
+        }
+
+        function rssiToRadius(rssi) {
+            return Math.max(8, 30 + rssi); // -85 -> 8, -69 -> 15
+        }
+
+        // Draw real world map
+        const mapSvg = document.getElementById('mapSvg');
+        
+        // Draw user location
+        const userPos = mapToSvg(record.lat_ref, record.lon_ref, 500, 400);
+        const userCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        userCircle.setAttribute('cx', userPos.x);
+        userCircle.setAttribute('cy', userPos.y);
+        userCircle.setAttribute('r', 8);
+        userCircle.setAttribute('fill', '#ff4444');
+        userCircle.setAttribute('stroke', '#aa0000');
+        userCircle.setAttribute('stroke-width', 2);
+        mapSvg.appendChild(userCircle);
+
+        // Add user label
+        const userLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        userLabel.setAttribute('x', userPos.x + 12);
+        userLabel.setAttribute('y', userPos.y + 4);
+        userLabel.setAttribute('font-size', '10');
+        userLabel.setAttribute('fill', '#333');
+        userLabel.textContent = 'User';
+        mapSvg.appendChild(userLabel);
+
+        // Draw cell towers
+        record.towers.forEach((tower, i) => {
+            const pos = mapToSvg(tower.lat, tower.lon, 500, 400);
+            
+            // Tower circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', pos.x);
+            circle.setAttribute('cy', pos.y);
+            circle.setAttribute('r', rssiToRadius(tower.rssi));
+            circle.setAttribute('fill', '#4444ff');
+            circle.setAttribute('fill-opacity', '0.7');
+            circle.setAttribute('stroke', '#0000aa');
+            circle.setAttribute('stroke-width', 1);
+            mapSvg.appendChild(circle);
+
+            // Tower label
+            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('x', pos.x);
+            label.setAttribute('y', pos.y + 3);
+            label.setAttribute('font-size', '9');
+            label.setAttribute('fill', 'white');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('font-weight', 'bold');
+            label.textContent = tower.id;
+            mapSvg.appendChild(label);
+
+            // Signal strength indicator
+            const strengthLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            strengthLabel.setAttribute('x', pos.x);
+            strengthLabel.setAttribute('y', pos.y - rssiToRadius(tower.rssi) - 5);
+            strengthLabel.setAttribute('font-size', '8');
+            strengthLabel.setAttribute('fill', '#333');
+            strengthLabel.setAttribute('text-anchor', 'middle');
+            strengthLabel.textContent = `${tower.rssi}dBm`;
+            mapSvg.appendChild(strengthLabel);
+        });
+
+        // Populate cell data table
+        const cellDataTable = document.getElementById('cellData');
+        record.towers.forEach(tower => {
+            const row = cellDataTable.insertRow();
+            row.insertCell(0).textContent = tower.id;
+            row.insertCell(1).textContent = tower.lat.toFixed(6);
+            row.insertCell(2).textContent = tower.lon.toFixed(6);
+            row.insertCell(3).textContent = tower.rssi;
+            row.insertCell(4).textContent = getSignalStrength(tower.rssi);
+        });
+
+        // Draw graph structure
+        const graphSvg = document.getElementById('graphSvg');
+        
+        // Position nodes in a circle for better visualization
+        const centerX = 250, centerY = 200, radius = 120;
+        const nodePositions = record.towers.map((tower, i) => {
+            const angle = (i / record.towers.length) * 2 * Math.PI;
+            return {
+                x: centerX + radius * Math.cos(angle),
+                y: centerY + radius * Math.sin(angle),
+                tower: tower
+            };
+        });
+
+        // Calculate edges based on distance and RSSI similarity
+        const distanceThreshold = 0.005; // degrees
+        const rssiThreshold = 15.0; // dBm
+        const edges = [];
+
+        for (let i = 0; i < nodePositions.length; i++) {
+            for (let j = i + 1; j < nodePositions.length; j++) {
+                const t1 = nodePositions[i].tower;
+                const t2 = nodePositions[j].tower;
+                
+                // Calculate distance (simplified Euclidean)
+                const distance = Math.sqrt(
+                    Math.pow(t1.lat - t2.lat, 2) + Math.pow(t1.lon - t2.lon, 2)
+                );
+                
+                // Calculate RSSI difference
+                const rssiDiff = Math.abs(t1.rssi - t2.rssi);
+                
+                // Check if edge should exist
+                if (distance <= distanceThreshold || rssiDiff <= rssiThreshold) {
+                    const distFactor = Math.max(0, 1 - (distance / distanceThreshold));
+                    const rssiFactor = Math.max(0, 1 - (rssiDiff / rssiThreshold));
+                    const edgeWeight = (distFactor + rssiFactor) / 2;
+                    
+                    edges.push({
+                        from: i, to: j, weight: edgeWeight,
+                        distance: distance, rssiDiff: rssiDiff
+                    });
+                }
+            }
+        }
+
+        // Draw edges first (so nodes appear on top)
+        edges.forEach(edge => {
+            const from = nodePositions[edge.from];
+            const to = nodePositions[edge.to];
+            
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', from.x);
+            line.setAttribute('y1', from.y);
+            line.setAttribute('x2', to.x);
+            line.setAttribute('y2', to.y);
+            line.setAttribute('stroke', '#888');
+            line.setAttribute('stroke-width', Math.max(1, edge.weight * 4));
+            line.setAttribute('stroke-opacity', '0.6');
+            graphSvg.appendChild(line);
+
+            // Edge weight label
+            const midX = (from.x + to.x) / 2;
+            const midY = (from.y + to.y) / 2;
+            const weightLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            weightLabel.setAttribute('x', midX);
+            weightLabel.setAttribute('y', midY - 5);
+            weightLabel.setAttribute('font-size', '8');
+            weightLabel.setAttribute('fill', '#666');
+            weightLabel.setAttribute('text-anchor', 'middle');
+            weightLabel.textContent = edge.weight.toFixed(2);
+            graphSvg.appendChild(weightLabel);
+        });
+
+        // Draw nodes
+        nodePositions.forEach((pos, i) => {
+            // Node circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', pos.x);
+            circle.setAttribute('cy', pos.y);
+            circle.setAttribute('r', 20);
+            circle.setAttribute('fill', '#4444ff');
+            circle.setAttribute('stroke', '#0000aa');
+            circle.setAttribute('stroke-width', 2);
+            graphSvg.appendChild(circle);
+
+            // Node label (cell ID)
+            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('x', pos.x);
+            label.setAttribute('y', pos.y + 3);
+            label.setAttribute('font-size', '10');
+            label.setAttribute('fill', 'white');
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('font-weight', 'bold');
+            label.textContent = pos.tower.id;
+            graphSvg.appendChild(label);
+
+            // RSSI value below node
+            const rssiLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            rssiLabel.setAttribute('x', pos.x);
+            rssiLabel.setAttribute('y', pos.y + 35);
+            rssiLabel.setAttribute('font-size', '8');
+            rssiLabel.setAttribute('fill', '#333');
+            rssiLabel.setAttribute('text-anchor', 'middle');
+            rssiLabel.textContent = `${pos.tower.rssi}dBm`;
+            graphSvg.appendChild(rssiLabel);
+        });
+
+        console.log('Generated edges:', edges);
+        console.log('Graph would have:', nodePositions.length, 'nodes and', edges.length * 2, 'directed edges');
+    </script>
+</body>
+</html>

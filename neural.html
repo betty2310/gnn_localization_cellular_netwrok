@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GNN Neural Network Architecture</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 50px;
+            font-size: 2.2em;
+        }
+
+        .network {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 600px;
+            position: relative;
+            overflow-x: auto;
+            padding: 20px 0;
+        }
+
+        .layer-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            min-width: 180px;
+        }
+
+        .layer-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .layer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .sublayer-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 8px;
+            text-align: center;
+            min-height: 20px;
+        }
+
+        .neurons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .neuron {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            border: 2px solid #bdc3c7;
+            background: #ecf0f1;
+            transition: all 0.3s ease;
+        }
+
+        .neuron:hover {
+            transform: scale(1.1);
+            border-color: #3498db;
+            background: #3498db;
+        }
+
+        .input-layer .neuron {
+            background: #f39c12;
+            border-color: #e67e22;
+        }
+
+        .hidden1 .neuron {
+            background: #e74c3c;
+            border-color: #c0392b;
+        }
+
+        .hidden2 .neuron {
+            background: #9b59b6;
+            border-color: #8e44ad;
+        }
+
+        .hidden3 .neuron {
+            background: #3498db;
+            border-color: #2980b9;
+        }
+
+        .hidden4 .neuron {
+            background: #1abc9c;
+            border-color: #16a085;
+        }
+
+        .output-layer .neuron {
+            background: #2ecc71;
+            border-color: #27ae60;
+        }
+
+        .connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .layer-info {
+            background: rgba(52, 152, 219, 0.1);
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-size: 13px;
+            max-width: 160px;
+            text-align: left;
+        }
+
+        .layer-info strong {
+            color: #2c3e50;
+        }
+
+        .arrow {
+            font-size: 40px;
+            color: #bdc3c7;
+            margin: 0 20px;
+            z-index: 2;
+            position: relative;
+        }
+
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        .connection-line {
+            stroke: gray;
+            stroke-width: 1;
+            opacity: 0.6;
+        }
+
+        .connection-line:hover {
+            stroke: #3498db;
+            stroke-width: 2;
+            opacity: 1;
+        }
+
+        @media (max-width: 1200px) {
+            .network {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 30px;
+            }
+
+            .arrow {
+                transform: rotate(90deg);
+                margin: 20px 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Graph Neural Network Architecture</h1>
+
+        <div class="network" id="network">
+            <!-- Input Layer -->
+            <div class="layer-group input-layer">
+                <div class="layer-title">Input Layer</div>
+                <div class="layer">
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Detected cell graph data</strong><br>
+                </div>
+            </div>
+
+            <div class="arrow">→</div>
+
+            <!-- Hidden Layer 1 -->
+            <div class="layer-group hidden1">
+                <div class="layer-title">Hidden Layer 1</div>
+                <div class="layer">
+                    <div class="sublayer-name">GATConv (4 heads)</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer">
+                    <div class="sublayer-name">BatchNorm + ReLU</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Graph Attention:</strong><br>
+                    • Learns attention weights for neighbors<br>
+                    • Uses edge attributes (distance, RSSI diff)<br>
+                    • 4 heads capture different relationships<br>
+                    Strong signals get higher attention
+                </div>
+            </div>
+
+            <div class="arrow">→</div>
+
+            <!-- Hidden Layer 2 -->
+            <div class="layer-group hidden2">
+                <div class="layer-title">Hidden Layer 2</div>
+                <div class="layer">
+                    <div class="sublayer-name">GATConv (2 heads)</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer">
+                    <div class="sublayer-name">SAGEConv</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Feature Refinement:</strong><br>
+                    • 2nd GAT layer captures 2-hop neighbors<br>
+                    • SAGE provides different aggregation<br>
+                    • Sample and aggregate strategy<br>
+                    More robust to graph variations
+                </div>
+            </div>
+
+            <div class="arrow">→</div>
+
+            <!-- Hidden Layer 3 -->
+            <div class="layer-group hidden3">
+                <div class="layer-title">Hidden Layer 3</div>
+                <div class="layer">
+                    <div class="sublayer-name">GCNConv + Residual</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer">
+                    <div class="sublayer-name">Global Pooling</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Graph Aggregation:</strong><br>
+                    • GCN for final node refinement<br>
+                    • Skip connection preserves info<br>
+                    • Mean + Attention pooling<br>
+                    Converts node features to graph features
+                </div>
+            </div>
+
+            <div class="arrow">→</div>
+
+            <!-- Hidden Layer 4 -->
+            <div class="layer-group hidden4">
+                <div class="layer-title">Hidden Layer 4</div>
+                <div class="layer">
+                    <div class="sublayer-name">Regressor MLP</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer">
+                    <div class="sublayer-name">Skip Connection</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Non-linear Mapping:</strong><br>
+                    • Deep MLP learns complex patterns<br>
+                    • BatchNorm + Dropout for stability<br>
+                    • Skip connection prevents info loss<br>
+                    Maps graph features to coordinates
+                </div>
+            </div>
+
+            <div class="arrow">→</div>
+
+            <!-- Output Layer -->
+            <div class="layer-group output-layer">
+                <div class="layer-title">Output Layer</div>
+                <div class="layer">
+                    <div class="sublayer-name">Final Linear</div>
+                    <div class="neurons">
+                        <div class="neuron"></div>
+                        <div class="neuron"></div>
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <strong>Coordinate Prediction:</strong><br>
+                    • 2D output: [lat, lon]<br>
+                    • Linear projection<br>
+                    • Normalized coordinates<br>
+                    Final location estimate
+                </div>
+            </div>
+
+            <svg id="connections"></svg>
+        </div>
+    </div>
+
+    <script>
+        // Draw connections between layers
+        function drawConnections() {
+            const svg = document.getElementById('connections');
+            const network = document.getElementById('network');
+            const layers = document.querySelectorAll('.layer-group');
+
+            svg.innerHTML = '';
+
+            for (let i = 0; i < layers.length - 1; i++) {
+                const currentLayer = layers[i];
+                const nextLayer = layers[i + 1];
+
+                const currentNeurons = currentLayer.querySelectorAll('.neuron');
+                const nextNeurons = nextLayer.querySelectorAll('.neuron');
+
+                currentNeurons.forEach(currentNeuron => {
+                    nextNeurons.forEach(nextNeuron => {
+                        const currentRect = currentNeuron.getBoundingClientRect();
+                        const nextRect = nextNeuron.getBoundingClientRect();
+                        const networkRect = network.getBoundingClientRect();
+
+                        const x1 = currentRect.left + currentRect.width / 2 - networkRect.left;
+                        const y1 = currentRect.top + currentRect.height / 2 - networkRect.top;
+                        const x2 = nextRect.left + nextRect.width / 2 - networkRect.left;
+                        const y2 = nextRect.top + nextRect.height / 2 - networkRect.top;
+
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', x1);
+                        line.setAttribute('y1', y1);
+                        line.setAttribute('x2', x2);
+                        line.setAttribute('y2', y2);
+                        line.setAttribute('class', 'connection-line');
+
+                        svg.appendChild(line);
+                    });
+                });
+            }
+        }
+
+        // Draw connections when page loads and on resize
+        window.addEventListener('load', drawConnections);
+        window.addEventListener('resize', drawConnections);
+    </script>
+</body>
+
+</html>
