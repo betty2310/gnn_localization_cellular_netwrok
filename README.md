@@ -37,7 +37,7 @@ The cellular network localization dataset was collected in Hanoi, Vietnam using 
    - Generalizes to different network topologies and densities
    - More robust to network changes and expansions
 
-## 🏗️ Architecture Design
+## Architecture
 
 ### GNN Model Architecture
 
@@ -62,28 +62,7 @@ Input: Graph with nodes [lat, lon, rssi] and spatial edges
     └── Output: [latitude, longitude]
 ```
 
-### Key Design Decisions
-
-- **GAT Layers**: Adaptive attention to important cells for localization
-- **Multi-head Attention**: 8 heads for diverse attention patterns
-- **3-layer Architecture**: Allows 3-hop message passing for local cell clusters
-- **Dual Pooling**: Mean + Max pooling for comprehensive graph representation
-- **Regularization**: Dropout (0.3) and batch normalization for stability
-
-## 📊 Data Processing Strategy
-
-### Sequential Train/Test Split
-- **Strategy**: For every 5 consecutive records, use first 4 for training, last 1 for testing
-- **Rationale**: Maintains temporal consistency while providing realistic evaluation
-- **Split Ratio**: ~80% training (16,924 records), ~20% testing (4,231 records)
-
-### Graph Construction
-- **Nodes**: Each detected cell with features [normalized_lat, normalized_lon, normalized_rssi]
-- **Edges**: Connect cells within distance threshold (~1.1km at Hanoi's latitude)
-- **Self-loops**: Added to ensure all nodes receive their own information
-- **Normalization**: StandardScaler for coordinates and RSSI values
-
-## 🚀 Installation and Setup
+## Installation
 
 ### Prerequisites
 - Python 3.10+
@@ -91,94 +70,4 @@ Input: Graph with nodes [lat, lon, rssi] and spatial edges
 
 ### Install Dependencies
 
-```bash
-# Install using pip
-pip install -e .
-
-# Or install dependencies manually
-pip install torch torch-geometric scikit-learn pandas numpy matplotlib seaborn
-```
-
-### For PyTorch Geometric (if installation issues occur):
-```bash
-# Install PyTorch first
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-
-# Then install PyTorch Geometric
-pip install torch-geometric
-```
-
-
-
-## 📁 Project Structure
-
-```
-localization-cellular-network-use-gnn/
-├── data/
-│   ├── logFile_urban_data.csv      # Main dataset
-│   └── readme.txt                  # Data description
-├── gnn_cellular_localization.py   # Main GNN implementation
-├── comparative_analysis.py         # Comparison framework
-├── demo.py                        # Simple demonstration
-├── pyproject.toml                 # Project dependencies
-├── README.md                      # This file
-└── main.py                        # Entry point
-```
-
-## 🔧 Hyperparameters
-
-### GNN Model Hyperparameters
-- **Learning Rate**: 0.001 (Adam optimizer)
-- **Batch Size**: 32
-- **Hidden Dimensions**: 64
-- **Number of Layers**: 3
-- **Attention Heads**: 8 (first layer), 1 (last layer)
-- **Dropout Rate**: 0.3
-- **Weight Decay**: 1e-5
-- **Distance Threshold**: 0.01 degrees (~1.1km)
-
-### Training Configuration
-- **Max Epochs**: 200
-- **Early Stopping Patience**: 20 epochs
-- **Learning Rate Scheduling**: ReduceLROnPlateau (factor=0.5, patience=10)
-- **Gradient Clipping**: Max norm = 1.0
-
-## 📊 Visualization and Analysis
-
-The implementation provides comprehensive visualizations:
-
-1. **Training Curves**: Loss progression during training
-2. **Prediction Accuracy**: Scatter plots of predicted vs actual coordinates
-3. **Distance Error Distribution**: Histogram and cumulative distribution
-4. **Geographic Error Visualization**: Spatial distribution of errors
-5. **Method Comparison Charts**: Side-by-side performance comparison
-6. **Accuracy vs Threshold Curves**: Performance at different distance thresholds
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 📚 References
-
-1. Kipf, T. N., & Welling, M. (2016). Semi-supervised classification with graph convolutional networks.
-2. Veličković, P., et al. (2017). Graph attention networks.
-3. Hamilton, W. L. (2020). Graph representation learning.
-4. Cellular network localization surveys and benchmarks.
-
-## 🙏 Acknowledgments
-
-- Dataset collected in Hanoi, Vietnam using Viettel network infrastructure
-- PyTorch Geometric team for excellent graph neural network library
-- Research community for foundational work in cellular localization
-
----
-
-**Note**: This implementation is designed for research and educational purposes. For production deployment, additional considerations for scalability, real-time processing, and network-specific optimizations may be required.
+TODO
